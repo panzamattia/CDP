@@ -117,13 +117,14 @@ def display_historical_graph(member_name, patient_id):
             st.warning("Only one date is available. Displaying the data for that date.")
             filtered_df = history_df  # No date filtering needed
         else:
-            # Slider for selecting a date range
+            # Add unique key to the slider for each family member
             start_date, end_date = st.slider(
-                "Select Date Range:",
+                f"Select Date Range for {member_name}",
                 min_value=min_date,
                 max_value=max_date,
                 value=(min_date, max_date),
-                format="YYYY-MM-DD"
+                format="YYYY-MM-DD",
+                key=f"slider_{member_name}"  # Unique key for each slider
             )
 
             # Filter the data based on the selected date range
