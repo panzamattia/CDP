@@ -113,59 +113,72 @@ def display_historical_graph(member_name, patient_id):
         min_date, max_date = history_df["Timestamp"].min().date(), history_df["Timestamp"].max().date()
         st.write(f"Data available from **{min_date}** to **{max_date}**")
 
-        if min_date == max_date:
-            st.warning("Only one date is available. Displaying the data for that date.")
-            filtered_df = history_df  # No date filtering needed
-        else:
-            # Add unique key to the slider for each family member
-            start_date, end_date = st.slider(
-                f"Select Date Range for {member_name}",
-                min_value=min_date,
-                max_value=max_date,
-                value=(min_date, max_date),
-                format="YYYY-MM-DD",
-                key=f"slider_{member_name}"  # Unique key for each slider
-            )
+        # Initialize session state for "current timestep"
+        key_current_ts = f"current_timestep_{member_name}"
+        if key_current_ts not in st.session_state:
+            st.session_state[key_current_ts] = history_df["Timestamp"].min()
 
-            # Filter the data based on the selected date range
-            filtered_df = history_df[
-                (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
-                (history_df["Timestamp"] <= pd.Timestamp(end_date))
-            ]
+        # Slider to select date range
+        start_date, end_date = st.slider(
+            f"Select Date Range for {member_name}",
+            min_value=min_date,
+            max_value=max_date,
+            value=(min_date, max_date),
+            format="YYYY-MM-DD",
+            key=f"slider_{member_name}"  # Unique key for each slider
+        )
 
-        # Thresholds for each variable
-        thresholds = st.session_state["thresholds"]
+        # Filter the data based on the selected date range
+        filtered_df = history_df[
+            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+            (history_df["Timestamp"] <= pd.Timestamp(end_date))
+        ]
 
-        # Initialize Plotly figure
+        # Button to move to the next timestep (simulate "real-time" data)
+        next_button = st.button(f"Next Timestep for {member_name}", key=f"next_button_{member_name}")
+
+        if next_button:
+            # Increment to the next available timestamp
+            current_ts = st.session_state[key_current_ts]
+            next_ts = history_df.loc[history_df["Timestamp"] > current_ts, "Timestamp"].min()
+
+            if pd.notnull(next_ts):
+                st.session_state[key_current_ts] = next_ts
+            else:
+                st.warning("No more data available for the selected range.")
+                st.session_state[key_current_ts] = history_df["Timestamp"].min()
+
+        # If slider is used, reset the real-time "current_timestep"
+        if start_date != min_date or end_date != max_date:
+            st.session_state[key_current_ts] = history_df["Timestamp"].min()
+
+        # Display the current timestep data
+        current_ts = st.session_state[key_current_ts]
+        st.write(f"### Real-Time Data for {current_ts}")
+        realtime_df = history_df[history_df["Timestamp"] == current_ts]
+
+        # Plot the real-time point on the graph
         fig = go.Figure()
 
         # Add line traces and markers for threshold violations
+        thresholds = st.session_state["thresholds"]
         for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
-            # Line for normal data
+            # Line for the filtered data
             fig.add_trace(go.Scatter(
                 x=filtered_df["Timestamp"],
                 y=filtered_df[variable],
-                mode='lines+markers',
+                mode='lines',
                 name=variable
             ))
 
-            # Add red triangle markers for threshold violations
-            high_threshold = thresholds[variable]["high"]
-            low_threshold = thresholds[variable]["low"]
-
-            # Highlight points where thresholds are exceeded
-            exceeded_df = filtered_df[
-                (filtered_df[variable] > high_threshold) | 
-                (filtered_df[variable] < low_threshold)
-            ]
-
-            if not exceeded_df.empty:
+            # Highlight current timestep data
+            if not realtime_df.empty:
                 fig.add_trace(go.Scatter(
-                    x=exceeded_df["Timestamp"],
-                    y=exceeded_df[variable],
+                    x=realtime_df["Timestamp"],
+                    y=realtime_df[variable],
                     mode='markers',
-                    marker=dict(size=12, color='red', symbol='triangle-up'),
-                    name=f"{variable} Threshold Exceeded"
+                    marker=dict(size=12, color='red', symbol='circle'),
+                    name=f"Real-Time {variable}"
                 ))
 
         # Update layout for better visuals
@@ -181,6 +194,7 @@ def display_historical_graph(member_name, patient_id):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
+
 
 
 
