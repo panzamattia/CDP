@@ -98,8 +98,7 @@ def display_health_data(member_name, patient):
         """, unsafe_allow_html=True
     )
 
-# Display historical data grap
-
+# Display historical data graph
 
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
@@ -114,12 +113,11 @@ def display_historical_graph(member_name, patient_id):
         min_date, max_date = history_df["Timestamp"].min().date(), history_df["Timestamp"].max().date()
         st.write(f"Data available from **{min_date}** to **{max_date}**")
 
-        # Handle case where min_date == max_date
         if min_date == max_date:
-            st.warning("Only one date is available in the data. Unable to select a range.")
-            filtered_df = history_df
+            st.warning("Only one date is available. Displaying the data for that date.")
+            filtered_df = history_df  # No date filtering needed
         else:
-            # Slider for date selection
+            # Slider for selecting a date range
             start_date, end_date = st.slider(
                 "Select Date Range:",
                 min_value=min_date,
@@ -128,7 +126,7 @@ def display_historical_graph(member_name, patient_id):
                 format="YYYY-MM-DD"
             )
 
-            # Filter data based on the selected date range
+            # Filter the data based on the selected date range
             filtered_df = history_df[
                 (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
                 (history_df["Timestamp"] <= pd.Timestamp(end_date))
@@ -146,7 +144,7 @@ def display_historical_graph(member_name, patient_id):
             fig.add_trace(go.Scatter(
                 x=filtered_df["Timestamp"],
                 y=filtered_df[variable],
-                mode='lines',
+                mode='lines+markers',
                 name=variable
             ))
 
