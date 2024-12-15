@@ -210,9 +210,8 @@ def display_goals(member_name):
     
     for goal, target in st.session_state["goals"].items():
         progress = st.session_state["goal_progress"][goal]
-        percentage = (progress / target) * 100
-        st.write(f"Progress: {percentage:.2f}%")
-        
+        display_activity_circle(goal, progress, target, member_name)  # Re-add gauge visualization
+
         new_target = st.number_input(
             f"Set Target for {goal.replace('_', ' ').capitalize()} (for {member_name}):",
             min_value=0.1, value=float(target), step=0.1, key=f"target_{goal}_{member_name}"
@@ -233,7 +232,7 @@ def display_goals(member_name):
                 st.session_state["celebrated_goals"][goal] = True
             
             st.session_state["goal_progress"][goal] = new_progress
-            st.rerun()  # Use st.rerun() instead of st.experimental_rerun
+            st.rerun()  # Ensure the dashboard updates after pr
 
 
 # Display alerts and customize thresholds
