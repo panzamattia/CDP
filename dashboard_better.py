@@ -205,26 +205,36 @@ def display_activity_circle(goal, progress, target, member_name):
 # Display goals and allow customization
 def display_goals(member_name):
     st.markdown("### Goals Progress")
+    if "celebrated_goals" not in st.session_state:
+        st.session_state["celebrated_goals"] = {goal: False for goal in st.session_state["goals"]}
+    
     for goal, target in st.session_state["goals"].items():
         progress = st.session_state["goal_progress"][goal]
-        display_activity_circle(goal, progress, target, member_name)
-        st.write(f"Progress: {progress}/{target} ({(progress / target) * 100:.2f}%)")
-
-        # Set new target
+        percentage = (progress / target) * 100
+        st.write(f"Progress: {percentage:.2f}%")
+        
         new_target = st.number_input(
             f"Set Target for {goal.replace('_', ' ').capitalize()} (for {member_name}):",
             min_value=0.1, value=float(target), step=0.1, key=f"target_{goal}_{member_name}"
         )
         st.session_state["goals"][goal] = new_target
-
-        # Add progress
+        
         increment = st.number_input(
             f"Add Progress to {goal.replace('_', ' ').capitalize()} (for {member_name}):",
-            min_value=0.1, value=0.1, step=0.1, key=f"increment_{goal}_{member_name}"
+            min_value=0.1, value=1.0, step=0.1, key=f"input_{goal}_{member_name}"
         )
-        if st.button(f"Update {goal.replace('_', ' ').capitalize()} for {member_name}", key=f"update_{goal}_{member_name}"):
-            st.session_state["goal_progress"][goal] += increment
-            st.experimental_rerun()
+        
+        if st.button(f"Update {goal.replace('_', ' ').capitalize()} for {member_name}", key=f"button_{goal}_{member_name}"):
+            new_progress = min(st.session_state["goal_progress"][goal] + increment, target)
+            
+            if new_progress >= target and not st.session_state["celebrated_goals"][goal]:
+                st.success(f"🎉 {goal.replace('_', ' ').capitalize()} Goal Reached for {member_name}! 🎉")
+                st.snow()
+                st.session_state["celebrated_goals"][goal] = True
+            
+            st.session_state["goal_progress"][goal] = new_progress
+            st.rerun()  # Use st.rerun() instead of st.experimental_rerun
+
 
 # Display alerts and customize thresholds
 def display_alerts_and_thresholds():
