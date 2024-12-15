@@ -100,8 +100,6 @@ def display_health_data(member_name, patient):
 
 # Display historical data grap
 
-import plotly.graph_objects as go
-
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
 
@@ -115,20 +113,25 @@ def display_historical_graph(member_name, patient_id):
         min_date, max_date = history_df["Timestamp"].min().date(), history_df["Timestamp"].max().date()
         st.write(f"Data available from **{min_date}** to **{max_date}**")
 
-        # Slider to select a date range
-        start_date, end_date = st.slider(
-            "Select Date Range:",
-            min_value=min_date,
-            max_value=max_date,
-            value=(min_date, max_date),
-            format="YYYY-MM-DD"
-        )
+        # Handle case where min_date == max_date
+        if min_date == max_date:
+            st.warning("Only one date is available in the data. Unable to select a range.")
+            filtered_df = history_df
+        else:
+            # Slider for date selection
+            start_date, end_date = st.slider(
+                "Select Date Range:",
+                min_value=min_date,
+                max_value=max_date,
+                value=(min_date, max_date),
+                format="YYYY-MM-DD"
+            )
 
-        # Filter data based on the selected date range
-        filtered_df = history_df[
-            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
-            (history_df["Timestamp"] <= pd.Timestamp(end_date))
-        ]
+            # Filter data based on the selected date range
+            filtered_df = history_df[
+                (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+                (history_df["Timestamp"] <= pd.Timestamp(end_date))
+            ]
 
         # Thresholds for each variable
         thresholds = st.session_state["thresholds"]
@@ -178,9 +181,6 @@ def display_historical_graph(member_name, patient_id):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
-
-
-
 
 
 # Display goal progress with Apple-like rings
