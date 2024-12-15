@@ -133,32 +133,37 @@ def display_historical_graph(member_name, patient_id):
             key=f"slider_{member_name}"  # Unique key for each slider
         )
 
-        # Filter data based on selected date range
-        filtered_df = history_df[
-            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
-            (history_df["Timestamp"] <= pd.Timestamp(end_date))
-        ]
+        # Determine whether to use the slider-selected range or "real-time" mode
+        use_slider = st.checkbox(f"Use Slider Data for {member_name}", value=False)
 
-        # Button to move to the next timestep
-        next_button = st.button(f"Next Timestep for {member_name}", key=f"next_button_{member_name}")
+        # If slider is checked, use the full range; otherwise, proceed with button logic
+        if use_slider:
+            filtered_df = history_df[
+                (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+                (history_df["Timestamp"] <= pd.Timestamp(end_date))
+            ]
+            st.session_state[key_accumulated_ts] = []  # Clear accumulated data if using the slider
+        else:
+            # Button to move to the next timestep
+            next_button = st.button(f"Next Timestep for {member_name}", key=f"next_button_{member_name}")
 
-        if next_button:
-            # Increment to the next available timestamp
-            current_ts = st.session_state[key_current_ts]
-            next_ts = history_df.loc[history_df["Timestamp"] > current_ts, "Timestamp"].min()
+            if next_button:
+                # Increment to the next available timestamp
+                current_ts = st.session_state[key_current_ts]
+                next_ts = history_df.loc[history_df["Timestamp"] > current_ts, "Timestamp"].min()
 
-            if pd.notnull(next_ts):
-                st.session_state[key_current_ts] = next_ts
-                st.session_state[key_accumulated_ts].append(next_ts)  # Append the new timestamp
-            else:
-                st.warning("No more data available for the selected range.")
+                if pd.notnull(next_ts):
+                    st.session_state[key_current_ts] = next_ts
+                    st.session_state[key_accumulated_ts].append(next_ts)  # Append the new timestamp
+                else:
+                    st.warning("No more data available for the selected range.")
 
-        # Add the first timestep if it's not already in the list
-        if not st.session_state[key_accumulated_ts]:
-            st.session_state[key_accumulated_ts].append(st.session_state[key_current_ts])
+            # Add the first timestep if it's not already in the list
+            if not st.session_state[key_accumulated_ts]:
+                st.session_state[key_accumulated_ts].append(st.session_state[key_current_ts])
 
-        # Filter data for accumulated timestamps
-        accumulated_df = history_df[history_df["Timestamp"].isin(st.session_state[key_accumulated_ts])]
+            # Filter data for accumulated timestamps
+            filtered_df = history_df[history_df["Timestamp"].isin(st.session_state[key_accumulated_ts])]
 
         # Thresholds for each variable
         thresholds = st.session_state["thresholds"]
@@ -170,8 +175,8 @@ def display_historical_graph(member_name, patient_id):
         for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
             # Line for normal data
             fig.add_trace(go.Scatter(
-                x=accumulated_df["Timestamp"],
-                y=accumulated_df[variable],
+                x=filtered_df["Timestamp"],
+                y=filtered_df[variable],
                 mode='lines+markers',
                 name=variable
             ))
@@ -180,9 +185,9 @@ def display_historical_graph(member_name, patient_id):
             high_threshold = thresholds[variable]["high"]
             low_threshold = thresholds[variable]["low"]
 
-            exceeded_df = accumulated_df[
-                (accumulated_df[variable] > high_threshold) | 
-                (accumulated_df[variable] < low_threshold)
+            exceeded_df = filtered_df[
+                (filtered_df[variable] > high_threshold) | 
+                (filtered_df[variable] < low_threshold)
             ]
 
             if not exceeded_df.empty:
@@ -207,6 +212,7 @@ def display_historical_graph(member_name, patient_id):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
+
 
 
 
