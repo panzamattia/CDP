@@ -101,14 +101,41 @@ def display_health_data(member_name, patient):
 # Display historical data graph
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
+
+    # Fetch the complete historical data for the patient
     history_df = fetch_historical_data(patient_id)
     if not history_df.empty:
+        # Convert timestamp column to datetime
         history_df["Timestamp"] = pd.to_datetime(history_df["Timestamp"])
-        st.line_chart(history_df.set_index("Timestamp")[[
-            "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
-        ]])
+
+        # Allow users to select a time period
+        min_date, max_date = history_df["Timestamp"].min(), history_df["Timestamp"].max()
+        st.write(f"Data available from {min_date.date()} to {max_date.date()}")
+
+        # Date range selection
+        start_date, end_date = st.date_input(
+            f"Select date range for {member_name}:",
+            value=(min_date.date(), max_date.date()),
+            min_value=min_date.date(),
+            max_value=max_date.date()
+        )
+
+        # Filter the dataframe based on selected date range
+        filtered_df = history_df[
+            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+            (history_df["Timestamp"] <= pd.Timestamp(end_date))
+        ]
+
+        # Plot the filtered data
+        if not filtered_df.empty:
+            st.line_chart(filtered_df.set_index("Timestamp")[[
+                "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
+            ]])
+        else:
+            st.warning("No data available for the selected date range.")
     else:
         st.info("No historical data available yet.")
+
 
 # Display goal progress with Apple-like rings
 def display_activity_circle(goal, progress, target, member_name):
