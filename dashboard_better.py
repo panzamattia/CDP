@@ -116,12 +116,16 @@ def display_historical_graph(member_name, patient_id):
         # Initialize session state for "current timestep" and accumulated data
         key_current_ts = f"current_timestep_{member_name}"
         key_accumulated_ts = f"accumulated_timestamps_{member_name}"
+        key_alerts = f"alerts_{member_name}"
 
         if key_current_ts not in st.session_state:
             st.session_state[key_current_ts] = history_df["Timestamp"].min()
 
         if key_accumulated_ts not in st.session_state:
             st.session_state[key_accumulated_ts] = []
+
+        if key_alerts not in st.session_state:
+            st.session_state[key_alerts] = []
 
         # Slider to select date range
         start_date, end_date = st.slider(
@@ -143,6 +147,7 @@ def display_historical_graph(member_name, patient_id):
                 (history_df["Timestamp"] <= pd.Timestamp(end_date))
             ]
             st.session_state[key_accumulated_ts] = []  # Clear accumulated data if using the slider
+            st.session_state[key_alerts] = []  # Clear alerts
         else:
             # Button to move to the next timestep
             next_button = st.button(f"Next Timestep for {member_name}", key=f"next_button_{member_name}")
@@ -155,6 +160,22 @@ def display_historical_graph(member_name, patient_id):
                 if pd.notnull(next_ts):
                     st.session_state[key_current_ts] = next_ts
                     st.session_state[key_accumulated_ts].append(next_ts)  # Append the new timestamp
+
+                    # Check for threshold violations and trigger alerts
+                    latest_data = history_df[history_df["Timestamp"] == next_ts].iloc[0]
+                    thresholds = st.session_state["thresholds"]
+
+                    for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
+                        value = latest_data[variable]
+                        if value > thresholds[variable]["high"]:
+                            alert_msg = f"⚠️ {member_name}: {variable} TOO HIGH ({value}) at {next_ts}"
+                            st.session_state[key_alerts].append(alert_msg)
+                            st.error(alert_msg)
+                        elif value < thresholds[variable]["low"]:
+                            alert_msg = f"⚠️ {member_name}: {variable} TOO LOW ({value}) at {next_ts}"
+                            st.session_state[key_alerts].append(alert_msg)
+                            st.error(alert_msg)
+
                 else:
                     st.warning("No more data available for the selected range.")
 
@@ -210,12 +231,15 @@ def display_historical_graph(member_name, patient_id):
 
         # Show the graph
         st.plotly_chart(fig, use_container_width=True)
+
+        # Display any accumulated alerts
+        if st.session_state[key_alerts]:
+            st.sidebar.subheader("⚠️ Real-Time Alerts")
+            for alert in st.session_state[key_alerts]:
+                st.sidebar.warning(alert)
+
     else:
         st.info("No historical data available yet.")
-
-
-
-
 
 
 # Display goal progress with Apple-like rings
