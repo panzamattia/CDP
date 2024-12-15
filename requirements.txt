@@ -1,4 +1,5 @@
 streamlit
 pandas
-matplotlib
+numpy
 plotly
+sqlite3  # Note: SQLite is built into Python, but you can include this for clarity.
