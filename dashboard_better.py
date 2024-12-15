@@ -108,31 +108,40 @@ def display_historical_graph(member_name, patient_id):
         # Convert timestamp column to datetime
         history_df["Timestamp"] = pd.to_datetime(history_df["Timestamp"])
 
-        # Allow users to select a time period
+        # Set minimum and maximum dates
         min_date, max_date = history_df["Timestamp"].min(), history_df["Timestamp"].max()
         st.write(f"Data available from {min_date.date()} to {max_date.date()}")
 
+        # Ensure valid default dates
+        default_start = min_date.date()
+        default_end = max_date.date()
+
         # Date range selection
-        start_date, end_date = st.date_input(
+        date_range = st.date_input(
             f"Select date range for {member_name}:",
-            value=(min_date.date(), max_date.date()),
-            min_value=min_date.date(),
-            max_value=max_date.date()
+            value=[default_start, default_end],  # Start and end date
+            min_value=default_start,
+            max_value=default_end
         )
 
-        # Filter the dataframe based on selected date range
-        filtered_df = history_df[
-            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
-            (history_df["Timestamp"] <= pd.Timestamp(end_date))
-        ]
+        # Check if the user selected valid date range
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            # Filter the dataframe based on selected date range
+            filtered_df = history_df[
+                (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+                (history_df["Timestamp"] <= pd.Timestamp(end_date))
+            ]
 
-        # Plot the filtered data
-        if not filtered_df.empty:
-            st.line_chart(filtered_df.set_index("Timestamp")[[
-                "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
-            ]])
+            # Plot the filtered data
+            if not filtered_df.empty:
+                st.line_chart(filtered_df.set_index("Timestamp")[[
+                    "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
+                ]])
+            else:
+                st.warning("No data available for the selected date range.")
         else:
-            st.warning("No data available for the selected date range.")
+            st.error("Please select a valid start and end date.")
     else:
         st.info("No historical data available yet.")
 
