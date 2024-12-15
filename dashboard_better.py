@@ -100,6 +100,7 @@ def display_health_data(member_name, patient):
 
 # Display historical data grap
 
+
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
 
@@ -181,6 +182,7 @@ def display_historical_graph(member_name, patient_id):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
+
 
 
 # Display goal progress with Apple-like rings
