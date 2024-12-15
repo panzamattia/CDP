@@ -109,73 +109,75 @@ def display_historical_graph(member_name, patient_id):
         # Convert timestamp column to datetime
         history_df["Timestamp"] = pd.to_datetime(history_df["Timestamp"])
 
-        # Set minimum and maximum dates
+        # Set min and max dates
         min_date, max_date = history_df["Timestamp"].min(), history_df["Timestamp"].max()
-        st.write(f"Data available from {min_date.date()} to {max_date.date()}")
+        st.write(f"Data available from **{min_date.date()}** to **{max_date.date()}**")
 
-        # Date range selection with default values
-        default_start = min_date.date()
-        default_end = max_date.date()
-        date_range = st.date_input(
-            f"Select date range for {member_name}:",
-            value=[default_start, default_end],
-            min_value=default_start,
-            max_value=default_end
+        # Replace the calendar with a slider for date selection
+        date_range = st.slider(
+            "Select Date Range:",
+            min_value=min_date,
+            max_value=max_date,
+            value=(min_date, max_date),
+            format="YYYY-MM-DD"
         )
 
-        # Validate date selection
-        if len(date_range) == 2:
-            start_date, end_date = date_range
-            filtered_df = history_df[
-                (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
-                (history_df["Timestamp"] <= pd.Timestamp(end_date))
+        # Filter data based on slider range
+        start_date, end_date = date_range
+        filtered_df = history_df[
+            (history_df["Timestamp"] >= start_date) &
+            (history_df["Timestamp"] <= end_date)
+        ]
+
+        # Thresholds for each variable
+        thresholds = st.session_state["thresholds"]
+
+        # Initialize Plotly figure
+        fig = go.Figure()
+
+        # Add line traces and markers for threshold violations
+        for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
+            # Line for normal data
+            fig.add_trace(go.Scatter(
+                x=filtered_df["Timestamp"],
+                y=filtered_df[variable],
+                mode='lines',
+                name=variable
+            ))
+
+            # Add red triangle markers for threshold violations
+            high_threshold = thresholds[variable]["high"]
+            low_threshold = thresholds[variable]["low"]
+
+            # Identify rows where thresholds are exceeded
+            exceeded_df = filtered_df[
+                (filtered_df[variable] > high_threshold) | 
+                (filtered_df[variable] < low_threshold)
             ]
 
-            # Thresholds for each variable
-            thresholds = st.session_state["thresholds"]
-
-            # Plot using Plotly
-            fig = go.Figure()
-
-            # Add line traces for each variable
-            for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
+            if not exceeded_df.empty:
                 fig.add_trace(go.Scatter(
-                    x=filtered_df["Timestamp"],
-                    y=filtered_df[variable],
-                    mode='lines',
-                    name=variable
+                    x=exceeded_df["Timestamp"],
+                    y=exceeded_df[variable],
+                    mode='markers',
+                    marker=dict(size=12, color='red', symbol='triangle-up'),
+                    name=f"{variable} Threshold Exceeded"
                 ))
 
-                # Add threshold markers
-                high_threshold = thresholds[variable]["high"]
-                low_threshold = thresholds[variable]["low"]
+        # Update layout for better visuals
+        fig.update_layout(
+            title=f"Historical Data for {member_name}",
+            xaxis_title="Timestamp",
+            yaxis_title="Values",
+            hovermode="x unified",
+            legend=dict(x=0, y=-0.5, orientation="h")
+        )
 
-                # Highlight points exceeding thresholds
-                for idx, row in filtered_df.iterrows():
-                    if row[variable] > high_threshold or row[variable] < low_threshold:
-                        fig.add_trace(go.Scatter(
-                            x=[row["Timestamp"]],
-                            y=[row[variable]],
-                            mode='markers',
-                            marker=dict(size=10, color='red', symbol='triangle-up'),
-                            name=f"Threshold Exceeded ({variable})"
-                        ))
-
-            # Update layout
-            fig.update_layout(
-                title=f"Historical Data for {member_name}",
-                xaxis_title="Timestamp",
-                yaxis_title="Values",
-                hovermode="x unified",
-                legend=dict(x=0, y=-0.5, orientation="h")
-            )
-
-            # Display the graph
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.error("Please select a valid start and end date.")
+        # Show the graph
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
+
 
 
 
