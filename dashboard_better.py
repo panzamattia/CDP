@@ -1,8 +1,9 @@
+import sqlite3
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import base64
 import plotly.graph_objects as go
+from database_setup import initialize_database, load_csv_to_database  # Import from setup script
 
 # Set page config
 st.set_page_config(page_title="Family Health Dashboard", layout="wide")
@@ -17,12 +18,6 @@ if "goals" not in st.session_state:
 if "goal_progress" not in st.session_state:
     st.session_state["goal_progress"] = {"steps_daily": 0, "calories": 0, "water": 0.0}
 
-if "vital_data_history" not in st.session_state:
-    st.session_state["vital_data_history"] = {f"Family Member {i}": pd.DataFrame() for i in range(1, 5)}
-
-if "alerts" not in st.session_state:
-    st.session_state["alerts"] = []
-
 if "thresholds" not in st.session_state:
     st.session_state["thresholds"] = {
         "Heartrate (bpm)": {"low": 60, "high": 100},
@@ -31,13 +26,8 @@ if "thresholds" not in st.session_state:
         "Heartratevariability (ms)": {"low": 20, "high": 80},
     }
 
-# Patient details
-patients = {
-    "Family Member 1": {"name": "Sophia Smith", "age": 32, "blood_type": "A+", "allergies": ["Peanuts"], "conditions": ["Diabetes"], "image": "frau.png"},
-    "Family Member 2": {"name": "James Brown", "age": 45, "blood_type": "B+", "allergies": [], "conditions": ["Hypertension"], "image": "mann.jpg"},
-    "Family Member 3": {"name": "Emily Davis", "age": 28, "blood_type": "O-", "allergies": ["Pollen"], "conditions": ["Asthma"], "image": "frau.png"},
-    "Family Member 4": {"name": "Michael Johnson", "age": 50, "blood_type": "AB+", "allergies": ["Shellfish"], "conditions": ["Cancer"], "image": "mann.jpg"},
-}
+if "alerts" not in st.session_state:
+    st.session_state["alerts"] = []
 
 # Helper to encode images
 def image_to_base64(image_path):
@@ -47,17 +37,80 @@ def image_to_base64(image_path):
     except:
         return ""
 
-# Load CSV files
-@st.cache_data
-def load_csv_data():
-    return {
-        "Family Member 1": pd.read_csv("person_1_health_data.csv"),
-        "Family Member 2": pd.read_csv("person_2_health_data.csv"),
-        "Family Member 3": pd.read_csv("person_3_health_data.csv"),
-        "Family Member 4": pd.read_csv("person_4_health_data.csv"),
-    }
+# Fetch patient data
+def fetch_patient_data(limit=4):
+    conn = sqlite3.connect("patients.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT id, name, age, blood_type, allergies, conditions, image 
+    FROM patients 
+    LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
 
-# Function to display activity circles
+    # Convert data to a dictionary
+    patients = {}
+    for idx, row in enumerate(rows, 1):
+        patients[f"Family Member {idx}"] = {
+            "id": row[0],
+            "name": row[1],
+            "age": row[2],
+            "blood_type": row[3],
+            "allergies": row[4].split(", ") if row[4] != "None" else [],
+            "conditions": row[5].split(", "),
+            "image": row[6]
+        }
+    return patients
+
+# Fetch historical data for a patient
+def fetch_historical_data(patient_id):
+    conn = sqlite3.connect("patients.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT timestamp, heartrate, blood_sugar, oxygen_saturation, hr_variability
+    FROM historical_data
+    WHERE patient_id = ?
+    ''', (patient_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Convert to DataFrame
+    return pd.DataFrame(rows, columns=["Timestamp", "Heartrate (bpm)", "Zucker (mmol/l)", 
+                                       "Sauerstoffsättigung (%)", "Heartratevariability (ms)"])
+
+# Display health data
+def display_health_data(member_name, patient):
+    st.markdown(f"## {member_name}")
+    image_base64 = image_to_base64(patient['image'])
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <img src="data:image/png;base64,{image_base64}" alt="{member_name}" 
+                style="width: 80px; height: 80px; border-radius: 50%; margin-right: 15px;">
+            <div>
+                <h4 style="margin: 0;">{patient['name']}</h4>
+                <p>Age: {patient['age']} | Blood Type: {patient['blood_type']}</p>
+                <p>Conditions: {', '.join(patient['conditions'])}</p>
+                <p>Allergies: {', '.join(patient['allergies']) if patient['allergies'] else 'None'}</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True
+    )
+
+# Display historical data graph
+def display_historical_graph(member_name, patient_id):
+    st.write("### Historical Data")
+    history_df = fetch_historical_data(patient_id)
+    if not history_df.empty:
+        history_df["Timestamp"] = pd.to_datetime(history_df["Timestamp"])
+        st.line_chart(history_df.set_index("Timestamp")[[
+            "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
+        ]])
+    else:
+        st.info("No historical data available yet.")
+
+# Display goal progress with Apple-like rings
 def display_activity_circle(goal, progress, target, member_name):
     percentage = min(progress / target * 100, 100)
     fig = go.Figure(go.Indicator(
@@ -75,135 +128,63 @@ def display_activity_circle(goal, progress, target, member_name):
     ))
     st.plotly_chart(fig, use_container_width=True, key=f"plot_{goal}_{member_name}")
 
-# Function to trigger alerts based on thresholds
-def trigger_alerts(member_name, row_data):
-    alerts = []
-    thresholds = st.session_state["thresholds"]
-    for key, limits in thresholds.items():
-        if key in row_data:
-            value = row_data[key]
-            if value < limits["low"]:
-                alerts.append(f"⚠️ {member_name}: {key} is TOO LOW ({value})!")
-            elif value > limits["high"]:
-                alerts.append(f"⚠️ {member_name}: {key} is TOO HIGH ({value})!")
-    if "alerts" not in st.session_state:
-        st.session_state["alerts"] = []
-    st.session_state["alerts"].extend(alerts)
-    for alert in alerts:
-        st.error(alert)
-
-# Function to display health data and trigger alerts
-def display_health_data(member_name, df, row):
-    st.markdown(f"## {member_name}")
-    patient = patients[member_name]
-    image_base64 = image_to_base64(patient['image'])
-    st.markdown(
-        f"""
-        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-            <img src="data:image/png;base64,{image_base64}" alt="{member_name}" style="width: 80px; height: 80px; border-radius: 50%; margin-right: 15px;">
-            <div>
-                <h4 style="margin: 0;">{patient['name']}</h4>
-                <p>Age: {patient['age']} | Blood Type: {patient['blood_type']}</p>
-                <p>Conditions: {', '.join(patient['conditions'])}</p>
-                <p>Allergies: {', '.join(patient['allergies']) if patient['allergies'] else 'None'}</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True
-    )
-    row_data = {
-        "Heartrate (bpm)": df['Heartrate (bpm)'][row],
-        "Zucker (mmol/l)": df['Zucker (mmol/l)'][row],
-        "Sauerstoffsättigung (%)": df['Sauerstoffsättigung (%)'][row],
-        "Heartratevariability (ms)": df['Heartratevariability (ms)'][row],
-    }
-    st.write(f"**Timestamp:** {df['Timestamp'][row]}")
-    for key, value in row_data.items():
-        st.write(f"**{key}:** {value}")
-    trigger_alerts(member_name, row_data)
-
-# Display historical graphs
-def display_historical_graph(member_name):
-    history_df = st.session_state["vital_data_history"][member_name]
-    if not history_df.empty:
-        st.line_chart(
-            history_df.set_index("Timestamp")[
-                ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]
-            ]
-        )
-    else:
-        st.info("No historical data available yet.")
-
-# Function to display and customize goals
+# Display goals and allow customization
 def display_goals(member_name):
     st.markdown("### Goals Progress")
-    if "celebrated_goals" not in st.session_state:
-        st.session_state["celebrated_goals"] = {goal: False for goal in st.session_state["goals"]}
     for goal, target in st.session_state["goals"].items():
         progress = st.session_state["goal_progress"][goal]
         display_activity_circle(goal, progress, target, member_name)
-        percentage = (progress / target) * 100
-        st.write(f"Progress: {percentage:.2f}%")
+        st.write(f"Progress: {progress}/{target} ({(progress / target) * 100:.2f}%)")
+
+        # Set new target
         new_target = st.number_input(
             f"Set Target for {goal.replace('_', ' ').capitalize()} (for {member_name}):",
             min_value=0.1, value=float(target), step=0.1, key=f"target_{goal}_{member_name}"
         )
         st.session_state["goals"][goal] = new_target
+
+        # Add progress
         increment = st.number_input(
             f"Add Progress to {goal.replace('_', ' ').capitalize()} (for {member_name}):",
-            min_value=0.1, value=1.0, step=0.1, key=f"input_{goal}_{member_name}"
+            min_value=0.1, value=0.1, step=0.1, key=f"increment_{goal}_{member_name}"
         )
-        if st.button(f"Update {goal.replace('_', ' ').capitalize()} for {member_name}", key=f"button_{goal}_{member_name}"):
-            new_progress = min(st.session_state["goal_progress"][goal] + increment, target)
-            if new_progress >= target and not st.session_state["celebrated_goals"][goal]:
-                st.success(f"🎉 {goal.replace('_', ' ').capitalize()} Goal Reached for {member_name}! 🎉")
-                st.snow()
-                st.session_state["celebrated_goals"][goal] = True
-            st.session_state["goal_progress"][goal] = new_progress
-            st.rerun()
+        if st.button(f"Update {goal.replace('_', ' ').capitalize()} for {member_name}", key=f"update_{goal}_{member_name}"):
+            st.session_state["goal_progress"][goal] += increment
+            st.experimental_rerun()
 
-# Function to display alerts and customize thresholds
+# Display alerts and customize thresholds
 def display_alerts_and_thresholds():
     st.sidebar.title("⚠️ Alerts & Notifications")
-    thresholds = st.session_state["thresholds"]
     st.sidebar.subheader("Set Alert Thresholds")
-    for metric, limits in thresholds.items():
-        col1, col2 = st.sidebar.columns(2)
-        thresholds[metric]["low"] = col1.number_input(
-            f"{metric} Low", value=float(limits["low"]), step=0.1, key=f"low_{metric}"
-        )
-        thresholds[metric]["high"] = col2.number_input(
-            f"{metric} High", value=float(limits["high"]), step=0.1, key=f"high_{metric}"
-        )
-    if "alerts" in st.session_state and st.session_state["alerts"]:
-        st.sidebar.subheader("Active Alerts")
-        for alert in st.session_state["alerts"]:
-            st.sidebar.warning(alert)
-    else:
-        st.sidebar.info("No alerts currently.")
+    for metric, limits in st.session_state["thresholds"].items():
+        st.sidebar.number_input(f"{metric} - Low Threshold", min_value=0.0, value=float(limits["low"]), step=0.1)
+        st.sidebar.number_input(f"{metric} - High Threshold", min_value=0.0, value=float(limits["high"]), step=0.1)
 
-
-# Main function
+# Main dashboard logic
 def main():
     st.title("Family Health Dashboard")
-    data = load_csv_data()
-    tabs = st.tabs(["Family Member 1", "Family Member 2", "Family Member 3", "Family Member 4"])
-    for idx, (member_name, df) in enumerate(data.items()):
+
+    # Ensure database is initialized
+    initialize_database()
+    load_csv_to_database()
+
+    # Fetch patient data
+    patients = fetch_patient_data(limit=4)
+
+    # Tabs for each family member
+    tabs = st.tabs(list(patients.keys()))
+    for idx, (member_name, patient) in enumerate(patients.items()):
         with tabs[idx]:
-            row = st.session_state["current_row"][member_name]
-            if row < len(df):
-                display_health_data(member_name, df, row)
-                st.session_state["vital_data_history"][member_name] = pd.concat(
-                    [st.session_state["vital_data_history"][member_name], df.iloc[[row]]]
-                ).reset_index(drop=True)
-                if st.button(f"Next Data for {member_name}", key=f"next_{member_name}"):
-                    st.session_state["current_row"][member_name] += 1
-                    st.rerun()
-                st.write("### Historical Data")
-                display_historical_graph(member_name)
-                st.write("### Goals")
-                display_goals(member_name)
-            else:
-                st.write("All data has been displayed for this family member.")
+            # Display health data
+            display_health_data(member_name, patient)
+
+            # Display historical data graph
+            display_historical_graph(member_name, patient["id"])
+
+            # Display goals
+            display_goals(member_name)
+
+    # Display alerts in the sidebar
     display_alerts_and_thresholds()
 
 if __name__ == "__main__":
