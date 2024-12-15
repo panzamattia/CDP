@@ -98,7 +98,8 @@ def display_health_data(member_name, patient):
         """, unsafe_allow_html=True
     )
 
-# Display historical data graph
+# Display historical data grap
+
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
 
@@ -112,38 +113,70 @@ def display_historical_graph(member_name, patient_id):
         min_date, max_date = history_df["Timestamp"].min(), history_df["Timestamp"].max()
         st.write(f"Data available from {min_date.date()} to {max_date.date()}")
 
-        # Ensure valid default dates
+        # Date range selection with default values
         default_start = min_date.date()
         default_end = max_date.date()
-
-        # Date range selection
         date_range = st.date_input(
             f"Select date range for {member_name}:",
-            value=[default_start, default_end],  # Start and end date
+            value=[default_start, default_end],
             min_value=default_start,
             max_value=default_end
         )
 
-        # Check if the user selected valid date range
+        # Validate date selection
         if len(date_range) == 2:
             start_date, end_date = date_range
-            # Filter the dataframe based on selected date range
             filtered_df = history_df[
                 (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
                 (history_df["Timestamp"] <= pd.Timestamp(end_date))
             ]
 
-            # Plot the filtered data
-            if not filtered_df.empty:
-                st.line_chart(filtered_df.set_index("Timestamp")[[
-                    "Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"
-                ]])
-            else:
-                st.warning("No data available for the selected date range.")
+            # Thresholds for each variable
+            thresholds = st.session_state["thresholds"]
+
+            # Plot using Plotly
+            fig = go.Figure()
+
+            # Add line traces for each variable
+            for variable in ["Heartrate (bpm)", "Zucker (mmol/l)", "Sauerstoffsättigung (%)", "Heartratevariability (ms)"]:
+                fig.add_trace(go.Scatter(
+                    x=filtered_df["Timestamp"],
+                    y=filtered_df[variable],
+                    mode='lines',
+                    name=variable
+                ))
+
+                # Add threshold markers
+                high_threshold = thresholds[variable]["high"]
+                low_threshold = thresholds[variable]["low"]
+
+                # Highlight points exceeding thresholds
+                for idx, row in filtered_df.iterrows():
+                    if row[variable] > high_threshold or row[variable] < low_threshold:
+                        fig.add_trace(go.Scatter(
+                            x=[row["Timestamp"]],
+                            y=[row[variable]],
+                            mode='markers',
+                            marker=dict(size=10, color='red', symbol='triangle-up'),
+                            name=f"Threshold Exceeded ({variable})"
+                        ))
+
+            # Update layout
+            fig.update_layout(
+                title=f"Historical Data for {member_name}",
+                xaxis_title="Timestamp",
+                yaxis_title="Values",
+                hovermode="x unified",
+                legend=dict(x=0, y=-0.5, orientation="h")
+            )
+
+            # Display the graph
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.error("Please select a valid start and end date.")
     else:
         st.info("No historical data available yet.")
+
 
 
 # Display goal progress with Apple-like rings
