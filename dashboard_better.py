@@ -100,6 +100,8 @@ def display_health_data(member_name, patient):
 
 # Display historical data grap
 
+import plotly.graph_objects as go
+
 def display_historical_graph(member_name, patient_id):
     st.write("### Historical Data")
 
@@ -109,12 +111,12 @@ def display_historical_graph(member_name, patient_id):
         # Convert timestamp column to datetime
         history_df["Timestamp"] = pd.to_datetime(history_df["Timestamp"])
 
-        # Set min and max dates
-        min_date, max_date = history_df["Timestamp"].min(), history_df["Timestamp"].max()
-        st.write(f"Data available from **{min_date.date()}** to **{max_date.date()}**")
+        # Set minimum and maximum dates
+        min_date, max_date = history_df["Timestamp"].min().date(), history_df["Timestamp"].max().date()
+        st.write(f"Data available from **{min_date}** to **{max_date}**")
 
-        # Replace the calendar with a slider for date selection
-        date_range = st.slider(
+        # Slider to select a date range
+        start_date, end_date = st.slider(
             "Select Date Range:",
             min_value=min_date,
             max_value=max_date,
@@ -122,11 +124,10 @@ def display_historical_graph(member_name, patient_id):
             format="YYYY-MM-DD"
         )
 
-        # Filter data based on slider range
-        start_date, end_date = date_range
+        # Filter data based on the selected date range
         filtered_df = history_df[
-            (history_df["Timestamp"] >= start_date) &
-            (history_df["Timestamp"] <= end_date)
+            (history_df["Timestamp"] >= pd.Timestamp(start_date)) &
+            (history_df["Timestamp"] <= pd.Timestamp(end_date))
         ]
 
         # Thresholds for each variable
@@ -149,7 +150,7 @@ def display_historical_graph(member_name, patient_id):
             high_threshold = thresholds[variable]["high"]
             low_threshold = thresholds[variable]["low"]
 
-            # Identify rows where thresholds are exceeded
+            # Highlight points where thresholds are exceeded
             exceeded_df = filtered_df[
                 (filtered_df[variable] > high_threshold) | 
                 (filtered_df[variable] < low_threshold)
@@ -177,6 +178,7 @@ def display_historical_graph(member_name, patient_id):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical data available yet.")
+
 
 
 
