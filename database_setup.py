@@ -58,10 +58,10 @@ def load_csv_to_database():
 
     # Map CSV files to patient IDs
     csv_files = {
-        1: "person_1_health_data_expanded.csv",
-        2: "person_2_health_data_expanded.csv",
-        3: "person_3_health_data_expanded.csv",
-        4: "person_4_health_data_expanded.csv"
+        1: "person_1_fixed.csv",
+        2: "person_2_fixed.csv",
+        3: "person_3_fixed.csv",
+        4: "person_4_fixed.csv"
     }
 
     # Insert data from CSV into the historical_data table
